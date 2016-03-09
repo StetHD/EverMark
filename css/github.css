@@ -1,13 +1,10 @@
 
 
 .markdown-body {
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
   color: #333;
   font-family: "Helvetica Neue", Helvetica, "Segoe UI", Arial, freesans, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
   font-size: 16px;
   line-height: 1.6;
-  word-wrap: break-word;
 }
 
 .markdown-body a {
@@ -196,13 +193,6 @@
   font: normal normal normal 16px/1 octicons-link;
   display: inline-block;
   text-decoration: none;
-  text-rendering: auto;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
 }
 
 .markdown-body .octicon-link:before {
@@ -411,8 +401,6 @@
   display: block;
   width: 100%;
   overflow: auto;
-  word-break: normal;
-  word-break: keep-all;
 }
 
 .markdown-body table th {
@@ -460,7 +448,6 @@
   padding: 0;
   margin: 0;
   font-size: 100%;
-  word-break: normal;
   white-space: pre;
   background: transparent;
   border: 0;
@@ -482,21 +469,16 @@
 
 .markdown-body .highlight pre {
   margin-bottom: 0;
-  word-break: normal;
 }
 
 .markdown-body pre {
-  word-wrap: normal;
 }
 
 .markdown-body pre code {
   display: inline;
-  max-width: initial;
   padding: 0;
   margin: 0;
-  overflow: initial;
   line-height: inherit;
-  word-wrap: normal;
   background-color: transparent;
   border: 0;
 }

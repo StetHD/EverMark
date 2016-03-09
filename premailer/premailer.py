@@ -548,6 +548,7 @@ class Premailer(object):
                 attributes['align'] = value.strip()
             elif key == 'vertical-align':
                 attributes['valign'] = value.strip()
+
             elif (
                 key == 'background-color' and
                 'transparent' not in value.lower()
@@ -556,7 +557,7 @@ class Premailer(object):
                 # contain the word "transparent"; before we add it possibly
                 # correct the 3-digit color code to its 6-digit equivalent
                 # ("abc" to "aabbcc") so IBM Notes copes.
-                attributes['bgcolor'] = self.six_color(value.strip())
+                pass  # attributes['bgcolor'] = self.six_color(value.strip())
             elif key == 'width' or key == 'height':
                 value = value.strip()
                 if value.endswith('px'):
