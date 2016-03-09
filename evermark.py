@@ -288,16 +288,6 @@ class EverMark(object):
         return True
 
     def sync_file(self, sub_dir_name, file_name):
-        """
-        :param sub_dir_name: sub_dir_name -> notebook_name
-        :param file_name: file_name -> note_title
-        :return: True/False
-
-        Sync a file to Evernote.
-        file_name should be title.txt(pure text note) or title.md(markdown note).
-        If there's not a notebook named sub_dir_name or note named file_name(without extension), then create one.
-        """
-
         self.debug('Start to sync file ' + os.path.join(self.root_path, sub_dir_name) + '/' + file_name)
         arr = file_name.split('.')
         if len(arr) != 2 or arr[1] not in ['txt', 'md']:
