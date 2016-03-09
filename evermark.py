@@ -9,6 +9,7 @@ import ConfigParser
 import chardet
 
 import markdown2
+import premailer
 
 import evernote.edam.type.ttypes as Types
 import evernote.edam.notestore.NoteStore as NoteStore
@@ -25,19 +26,21 @@ class EverMark(object):
                                                 'root': '.',
                                                 'auth_token': '',
                                                 'ignore_dirs': '',
-                                                'input_encoding': ''})
+                                                'input_encoding': '',
+                                                'style': 'github'})
             cf.read(conf)
 
             opt = cf.get('main', 'debug')
-            self._debug = True if (opt=='yes') else False
+            self._debug = True if (opt == 'yes') else False
 
             opt = cf.get('main', 'test')
-            self._test = True if (opt=='yes') else False
+            self._test = True if (opt == 'yes') else False
 
             self.account_type = cf.get('main', 'account_type')
             self.root_path = cf.get('main', 'root')
             self.auth_token = cf.get('main', 'auth_token')
             self.input_encoding = cf.get('main', 'input_encoding')
+            self.style = cf.get('main', 'style')
 
             opt = cf.get('main', 'ignore_dirs')
             if opt:
@@ -49,11 +52,16 @@ class EverMark(object):
             self.debug('root_path:' + self.root_path)
             self.debug('auth_token:' + self.auth_token)
             self.debug('ignore_dirs:' + str(self.ignore_sub_dirs))
+            self.debug('style:' + self.style)
 
         except Exception, e:
             self.debug(str(e))
             print 'ERROR: Read confi.ini failed !'
             exit(0)
+
+        self.css_str = ''
+        with open(self.style + '.css') as f:
+            self.css_str = f.read()
 
         self.client = None
         self.user_store = None
@@ -162,13 +170,25 @@ class EverMark(object):
 
         self.debug('End sync note status.')
 
-    @staticmethod
-    def markdown2html(markdown_str):
+    def markdown2html(self, markdown_str):
         if not isinstance(markdown_str, unicode):
             print 'ERROR: String is not unicode in markdown2html'
             return ''
 
-        html = markdown2.markdown(markdown_str, extras=["tables", "fenced-code-blocks", "cuddled-lists"])
+        html = '<style>' + self.css_str
+        html += '.markdown-body {box-sizing: border-box;min-width: ' \
+                '200px;max-width: 980px;margin: 0 auto;padding: 45px;}'
+        html += '</style>'
+        html += '<article class="markdown-body">'
+        html += markdown2.markdown(markdown_str, extras=["tables", "fenced-code-blocks", "cuddled-lists"])
+        html += '</article>'
+
+        prem = premailer.Premailer(html, preserve_inline_attachments=False, base_path='article')
+        html = prem.transform(pretty_print=True)
+        html = html[html.find('<article'):]
+        html = html[html.find('>')+1:]
+        html = html[:html.find('</article>')]
+        self.debug("inline css over")
         return html
 
     @staticmethod
