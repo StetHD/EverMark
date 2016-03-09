@@ -60,8 +60,8 @@ class EverMark(object):
             exit(0)
 
         self.css_str = ''
-        with open(self.style + '.css') as f:
-            self.css_str = f.read()
+        with open('./css/' + self.style + '.css') as f:
+            self.css_str = f.read().decode('utf-8')
 
         self.client = None
         self.user_store = None
@@ -175,7 +175,7 @@ class EverMark(object):
             print 'ERROR: String is not unicode in markdown2html'
             return ''
 
-        html = '<style>' + self.css_str
+        html = u'<style>' + self.css_str
         html += '.markdown-body {box-sizing: border-box;min-width: ' \
                 '200px;max-width: 980px;margin: 0 auto;padding: 45px;}'
         html += '</style>'
@@ -379,13 +379,8 @@ class EverMark(object):
 
             cur_time = time.time()
             if cur_time - last_sync > intv_sync:
-                try:
-                    self.sync()
-                except Exception, e:
-                    self.debug(str(e))
-                    print 'WARN: Sync note failed.'
-                finally:
-                    last_sync = cur_time
+                self.sync()
+                last_sync = cur_time
 
 
 if __name__ == '__main__':
