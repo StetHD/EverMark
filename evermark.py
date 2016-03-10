@@ -5,9 +5,12 @@ import os
 import cgi
 import time
 import datetime
+import json
 import ConfigParser
-import chardet
+import traceback
+import logging
 
+import chardet
 import markdown2
 import premailer
 
@@ -16,22 +19,52 @@ import evernote.edam.notestore.NoteStore as NoteStore
 import evernote.edam.userstore.constants as UserStoreConstants
 from evernote.api.client import EvernoteClient
 
+logging.basicConfig(filename="sync.log", format='%(asctime)-15s [%(levelname)s] %(message)s')
+log = logging.getLogger('sync')
+log.setLevel(logging.INFO)
+
+TIME_FORMAT = '%Y-%m-%d %H:%M:%S'
+
+
+def current_time():
+    return datetime.datetime.now().strftime(TIME_FORMAT)
+
+
+def modify_time(fpath):
+    return time.strftime(TIME_FORMAT, time.localtime(os.path.getmtime(fpath)))
+
+
+def compare(str_time1, str_time2):
+    time1 = time.strptime(str_time1, TIME_FORMAT)
+    time2 = time.strptime(str_time2, TIME_FORMAT)
+    timestamp1 = time.mktime(time1)
+    timestamp2 = time.mktime(time2)
+    return timestamp1 - timestamp2
+
 
 class EverMark(object):
-    def __init__(self, conf='conf.ini'):
+    """
+    Standard usage should be like:
+        1. em = EverMark(conf='confi.ini')
+        2. em.login()
+        3. sync(rpath, sub_dir, fname)   rpath -> root sync path, sub_dir -> notebook, fname -> note
+    """
+    def __init__(self, conf='conf.ini'):  # Default configure file is in the same directory of evermark.py
         try:
-            cf = ConfigParser.SafeConfigParser({'debug': 'no',
-                                                'test': 'no',
+            logging.info('='*10 + 'EverMark Sync Start' + '='*10)
+            cf = ConfigParser.SafeConfigParser({'test': 'no',  # Test locally
                                                 'account_type': 'evernote',
-                                                'root': '.',
+                                                'root': '.',  # The directory that EverMark is installed to .
                                                 'auth_token': '',
                                                 'ignore_dirs': '',
                                                 'input_encoding': '',
-                                                'style': 'github'})
+                                                'style': 'github',
+                                                'log_level': 'info'})
             cf.read(conf)
 
-            opt = cf.get('main', 'debug')
-            self._debug = True if (opt == 'yes') else False
+            opt = cf.get('main', 'log_level')
+            if opt == 'debug':
+                log.setLevel(logging.DEBUG)
 
             opt = cf.get('main', 'test')
             self._test = True if (opt == 'yes') else False
@@ -48,20 +81,30 @@ class EverMark(object):
             else:
                 self.ignore_sub_dirs = []
 
-            self.debug('account_type:' + self.account_type)
-            self.debug('root_path:' + self.root_path)
-            self.debug('auth_token:' + self.auth_token)
-            self.debug('ignore_dirs:' + str(self.ignore_sub_dirs))
-            self.debug('style:' + self.style)
+            log.debug('account_type:' + self.account_type)
+            log.debug('root_path:' + self.root_path)
+            log.debug('auth_token:' + self.auth_token)
+            log.debug('ignore_dirs:' + str(self.ignore_sub_dirs))
+            log.debug('style:' + self.style)
 
-        except Exception, e:
-            self.debug(str(e))
-            print 'ERROR: Read confi.ini failed !'
+        except:
+            log.critical(traceback.format_exc())
             exit(0)
 
         self.css_str = ''
-        with open('./css/' + self.style + '.css') as f:
+        css_file_path = os.path.join(self.root_path, 'css/' + self.style + '.css')
+        log.debug('Load CSS from file: ' + css_file_path)
+        with open(css_file_path) as f:
             self.css_str = f.read().decode('utf-8')
+
+        # Create directory for html logs
+        if 'html' not in os.listdir('.'):
+            os.mkdir('./html')
+        self.html_log_path = './html'
+
+        self.note_sync_status_file_path = os.path.join(self.root_path, 'status.json')
+        self.note_sync_status = {}  # {note_guid: modify_time} modify time is of 'YYYY-MM-DD hh:mm:ss' format
+        self.load_note_sync_status_record()
 
         self.client = None
         self.user_store = None
@@ -72,26 +115,38 @@ class EverMark(object):
         self.notebook_guids = []
         self.notes = {}  # {notebook_guid: [{'guid': note_guid, 'title': note_title}, ...]}
 
-    def debug(self, info):
-        if self._debug:
-            with open('debug.log', 'a') as f:
-                time_tag = datetime.datetime.strftime(datetime.datetime.now()-datetime.timedelta(1), '%Y-%m-%d') \
-                           + ' ' + time.strftime("%H:%M:%S")
-                line = time_tag + ' [DEBUG] %s' % info + '\n'
-                f.write(line.encode('utf-8-sig'))
-                f.flush()
+    def dump_note_sync_status_record(self):
+        try:
+            with open(self.note_sync_status_file_path, 'w') as f:
+                text = json.dumps(self.note_sync_status)
+                f.write(text)
+        except:
+            log.error(traceback.format_exc())
+
+    def load_note_sync_status_record(self):
+        try:
+            with open(self.note_sync_status_file_path) as f:
+                text = f.read()
+                self.note_sync_status = json.loads(text)
+                log.debug('Load sync status succeed')
+        except:
+            log.error(traceback.format_exc())
+            self.note_sync_status = {}
+
+    def update_note_sync_status(self, note_guid, time_str):
+        self.note_sync_status[note_guid] = time_str
 
     def login(self):
         if self._test:
             return True
 
-        self.debug('Start to login.')
+        log.debug('Start to login')
         yx = False
         if self.account_type == 'yinxiang':
             yx = True
-            self.debug('Account type:' + 'yinxiang')
+            log.debug('Account type:' + 'yinxiang')
         else:
-            self.debug('Account type:' + 'evernote')
+            log.debug('Account type:' + 'evernote')
 
         try:
             self.client = EvernoteClient(token=self.auth_token, sandbox=False, yinxiang=yx)
@@ -100,41 +155,41 @@ class EverMark(object):
                                                       UserStoreConstants.EDAM_VERSION_MAJOR,
                                                       UserStoreConstants.EDAM_VERSION_MINOR)
             if not version_ok:
-                print 'ERROR: Evernote SDK version not up to data.'
+                log.error('Evernote SDK version not up to data')
                 return False
             self.note_store = self.client.get_note_store()
-            self.debug('Login succeed.')
+            log.info('Login succeed')
             return True
-        except Exception, e:
-            print 'ERROR: Login failed !'
-            print e
+        except:
+            log.debug(traceback.format_exc())
+            log.error('Login failed')
 
     def sync_status(self):
         if self._test:
             return
 
-        self.debug('Start to sync status.')
+        log.debug('Start to sync status.')
         self.notebooks = []
         self.notebook_names = {}
         self.notebook_guids = []
         self.notes = {}
         self.sync_notebook_status()
         self.sync_note_status()
-        self.debug('End sync status.')
+        log.debug('End sync status.')
 
     def sync_notebook_status(self):
-        self.debug('Start to sync notebook status.')
+        log.debug('Start to sync notebook status')
         self.notebooks = self.note_store.listNotebooks()
         for notebook in self.notebooks:
             notebook_name = notebook.name.decode('utf-8')
-            self.debug(' [notebook] ' + notebook.guid + ':' + notebook_name)
+            log.debug(' [notebook] ' + notebook.guid + ':' + notebook_name)
             self.notebook_names[notebook.guid] = notebook_name
             self.notebook_guids.append(notebook.guid)
             self.notes[notebook.guid] = []
-        self.debug('End sync notebook status.')
+        log.debug('End sync notebook status')
 
     def sync_note_status(self):
-        self.debug('Start to sync note status.')
+        log.debug('Start to sync note status')
         find_filter = NoteStore.NoteFilter()
         spec = NoteStore.NotesMetadataResultSpec()
         spec.includeTitle = True
@@ -150,29 +205,28 @@ class EverMark(object):
 
             for note in notes.notes:
                 notebook_guid = note.notebookGuid
-                note_title = note.title.decode('utf-8')
-
                 if not notebook_guid:
                     continue
+
+                note_title = note.title.decode('utf-8')
+                note_modify_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(note.updated/1000)))
+                self.note_sync_status[note.guid] = note_modify_time
 
                 if notebook_guid not in self.notes:
                     self.notes[notebook_guid] = []
 
                 self.notes[notebook_guid].append({'guid': note.guid, 'title': note_title})
-
-                if self._debug:
-                    self.debug(' [note] ' + note.guid + ':' + note_title)
+                log.debug(' [note] ' + note.guid + ':' + note_title + ':' + note_modify_time)
 
             if got_count >= all_count:
                 break
-
-        print 'Get all ', got_count, ' notes .'
-
-        self.debug('End sync note status.')
+        self.dump_note_sync_status_record()
+        log.info('Get all ' + str(got_count) + ' notes ')
+        log.debug('End sync note status.')
 
     def markdown2html(self, markdown_str):
         if not isinstance(markdown_str, unicode):
-            print 'ERROR: String is not unicode in markdown2html'
+            log.error('String is not unicode in markdown2html')
             return ''
 
         html = u'<style>' + self.css_str
@@ -183,18 +237,38 @@ class EverMark(object):
         html += markdown2.markdown(markdown_str, extras=["tables", "fenced-code-blocks", "cuddled-lists"])
         html += '</article>'
 
+        if log.isEnabledFor(logging.DEBUG):
+            pre_html_file_path = os.path.join(self.html_log_path, str(time.time()).replace('.', '') + '-pre_inline.html')
+            with open(pre_html_file_path, 'w')as f:
+                f.write(html.encode('utf-8-sig'))
+                log.debug('Dump html file ' + pre_html_file_path)
+
         prem = premailer.Premailer(html, preserve_inline_attachments=False, base_path='article')
         html = prem.transform(pretty_print=True)
+
+        if log.isEnabledFor(logging.DEBUG):
+            html_file_path = os.path.join(self.html_log_path, str(time.time()).replace('.', '') + '-inline.html')
+            with open(html_file_path, 'w')as f:
+                f.write(html.encode('utf-8-sig'))
+                log.debug('Dump inlined html file ' + html_file_path)
+
         html = html[html.find('<article'):]
         html = html[html.find('>')+1:]
         html = html[:html.find('</article>')]
-        self.debug("inline css over")
+
+        if log.isEnabledFor(logging.DEBUG):
+            cut_html_file_path = os.path.join(self.html_log_path, str(time.time()).replace('.', '') + '-cut_inline.html')
+            with open(cut_html_file_path, 'w')as f:
+                f.write(html.encode('utf-8-sig'))
+                log.debug('Dump cutted inlined html file ' + cut_html_file_path)
+
+        log.debug("inline css over")
         return html
 
     @staticmethod
     def text2html(text_str):
         if not isinstance(text_str, unicode):
-            print 'ERROR: String is not unicode in markdown2html'
+            log.error('String is not unicode in markdown2html')
             return ''
 
         text_str.replace('\r', '')
@@ -240,12 +314,12 @@ class EverMark(object):
             return False
 
     def create_notebook(self, notebook_name):
-        self.debug('Start to create notebook ' + notebook_name + ' .')
+        log.debug('Start to create notebook ' + notebook_name)
         notebook = Types.Notebook()
         notebook.name = notebook_name
         notebook.defaultNotebook = False
         created_notebook = self.note_store.createNotebook(notebook)
-        self.debug('Create notebook succeed.')
+        log.debug('Create notebook succeed')
         self.notebook_names[created_notebook.guid] = notebook_name
         self.notebook_guids.append(created_notebook.guid)
         self.notes[created_notebook.guid] = []
@@ -266,34 +340,34 @@ class EverMark(object):
 
         notebook_guid = self.get_notebook_guid(notebook_name)
         if not notebook_guid:
-            print 'ERROR: In create_note, can not get a notebook named ' + notebook_name
+            log.error('In create_note, can not get a notebook named ' + notebook_name)
             return False
 
         note.notebookGuid = notebook_guid
         return note
 
     def create_note(self, notebook_name, note_title, html):
-        self.debug('Start to create note ' + notebook_name + '/' + note_title + '  .')
+        log.debug('Start to create note ' + notebook_name + '/' + note_title)
         note = self.inner_create_note(notebook_name, note_title, html)
         created_note = self.note_store.createNote(note)
         self.notes[note.notebookGuid].append({'guid': created_note.guid, 'title': created_note.title})
-        self.debug("Successfully create a new note with GUID %s." % created_note.guid)
-        return True
+        log.debug("Successfully create a new note with GUID %s" % created_note.guid)
+        return created_note
 
     def update_note(self, notebook_name, note_title, html, guid):
-        self.debug('Start to update note ' + notebook_name + '/' + note_title + '  .')
+        log.debug('Start to update note ' + notebook_name + '/' + note_title)
         note = self.inner_create_note(notebook_name, note_title, html, guid)
         updated_note = self.note_store.updateNote(note)
-        self.debug("Successfully update note with GUID: " + updated_note.guid)
+        log.debug("Successfully update note with GUID: " + updated_note.guid)
         return True
 
-    def sync_file(self, sub_dir_name, file_name):
-        self.debug('Start to sync file ' + os.path.join(self.root_path, sub_dir_name) + '/' + file_name)
+    def sync_file(self, base_path, sub_dir_name, file_name):
+        log.debug('Start to sync file ' + os.path.join(base_path, sub_dir_name) + '/' + file_name)
         arr = file_name.split('.')
         if len(arr) != 2 or arr[1] not in ['txt', 'md']:
             return False
 
-        input_file_path = os.path.join(self.root_path, sub_dir_name) + '/' + file_name
+        input_file_path = os.path.join(base_path, sub_dir_name) + '/' + file_name
         file_content = ''
         with open(input_file_path) as f:
             file_content = f.read()
@@ -305,6 +379,13 @@ class EverMark(object):
         if not self._test and not self.is_notebook_exists(notebook_name):
             self.create_notebook(notebook_name)
 
+        note_guid = self.get_note_guid(notebook_name, note_title)
+        if note_guid and note_guid in self.note_sync_status and self.note_sync_status[note_guid]:
+            # Sync only when local_modify_time - last_sync_time > 10 seconds
+            if compare(modify_time(input_file_path), self.note_sync_status[note_guid]) < 10:
+                log.debug('Skip sync %s : %s' % (notebook_name, note_title))
+                return
+
         if isinstance(file_content, str):
             encoding = 'utf-8'
             if self.input_encoding:
@@ -312,10 +393,10 @@ class EverMark(object):
             else:
                 detect_result = chardet.detect(file_content)
                 if 'encoding' not in detect_result or not detect_result['encoding']:
-                    print 'ERROR: Auto detect encoding of file %s failed.' % input_file_path
+                    log.error('Auto detect encoding of file %s failed' % input_file_path)
                     encoding = 'utf-8'
                 else:
-                    self.debug('Auto detect encoding of file %s succeed: %s' % (input_file_path, detect_result['encoding']))
+                    log.debug('Auto detect encoding of file %s succeed: %s' % (input_file_path, detect_result['encoding']))
                     encoding = detect_result['encoding']
             file_content = file_content.decode(encoding)
 
@@ -330,26 +411,32 @@ class EverMark(object):
                 f.write(html.encode('utf-8-sig'))
             return
 
-        note_guid = self.get_note_guid(notebook_name, note_title)
-        if note_guid:
-            self.update_note(notebook_name, note_title, html, note_guid)
-        else:
-            self.create_note(notebook_name, note_title, html)
+        try:
+            if note_guid:
+                self.update_note(notebook_name, note_title, html, note_guid)
+            else:
+                note_guid = self.create_note(notebook_name, note_title, html).guid
+            mod_time = datetime.datetime.now().strftime(TIME_FORMAT)
+            self.update_note_sync_status(note_guid, mod_time)
+            log.info('Sync %s : %s succeed at %s' % (notebook_name, note_title, mod_time))
+        except:
+            log.error(traceback.format_exc())
 
-    def sync(self):
-        sub_dirs = os.listdir('.')
+    def sync(self, root_path):  # root_path should be absolute path
+        sub_dirs = os.listdir(root_path)
         for sub_dir in sub_dirs:
             if '.' in sub_dir or sub_dir in self.ignore_sub_dirs:
                 continue
-            files = os.listdir('./'+sub_dir)
+            files = os.listdir(os.path.join(root_path, sub_dir))
             for file in files:
                 if '.' not in file or file.split('.')[-1] not in ['md', 'txt']:
                     continue
-                self.sync_file(sub_dir, file)
+                self.sync_file(root_path, sub_dir, file)
+        self.dump_note_sync_status_record()
 
-    def run(self, intv_sync_status=1000, intv_sync=100):
+    def run(self, root_path, intv_sync_status=1000, intv_sync=100):
         if not self.login():
-            print 'login failed'
+            log.error('login failed')
             return
 
         last_sync_status = time.time() - intv_sync_status - 100
@@ -361,18 +448,18 @@ class EverMark(object):
             if cur_time - last_sync_status > intv_sync_status:
                 try:
                     self.sync_status()
-                except Exception, e:
-                    self.debug(str(e))
-                    print 'WARN: Sync notebook status failed.'
+                except:
+                    log.debug(traceback.format_exc())
+                    log.error('Sync notebook status failed')
                 finally:
                     last_sync_status = cur_time
 
             cur_time = time.time()
             if cur_time - last_sync > intv_sync:
-                self.sync()
+                self.sync(root_path)
                 last_sync = cur_time
 
 
 if __name__ == '__main__':
     em = EverMark()
-    em.run()
+    em.run('./test')

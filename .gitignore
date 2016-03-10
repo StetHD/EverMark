@@ -63,6 +63,6 @@ target/
 
 .idea
 img/
-test*/
 /conf.ini
-/test*
+html/*
+/*.json
