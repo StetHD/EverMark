@@ -19,10 +19,7 @@ import evernote.edam.notestore.NoteStore as NoteStore
 import evernote.edam.userstore.constants as UserStoreConstants
 from evernote.api.client import EvernoteClient
 
-logging.basicConfig(filename="sync.log", format='%(asctime)-15s [%(levelname)s] %(message)s')
-log = logging.getLogger('sync')
-log.setLevel(logging.INFO)
-
+log = None
 TIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 
@@ -49,12 +46,20 @@ class EverMark(object):
         2. em.login()
         3. sync(rpath, sub_dir, fname)   rpath -> root sync path, sub_dir -> notebook, fname -> note
     """
-    def __init__(self, conf='conf.ini'):  # Default configure file is in the same directory of evermark.py
+    def __init__(self, conf=os.path.join(os.path.abspath(os.path.dirname(__file__)), 'conf.ini')):  # Default configure file is in the same directory of evermark.py
         try:
-            logging.info('='*10 + 'EverMark Sync Start' + '='*10)
+            log_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'logs')
+            if not os.path.exists(log_path):
+                os.mkdir(log_path)
+            log_file_path = os.path.join(log_path, 'evermark_sync.log')
+            logging.basicConfig(filename=log_file_path, format='%(asctime)-15s [%(levelname)s] %(message)s')
+            global log
+            log = logging.getLogger('sync')
+            log.setLevel(logging.INFO)
+
             cf = ConfigParser.SafeConfigParser({'test': 'no',  # Test locally
                                                 'account_type': 'evernote',
-                                                'root': '.',  # The directory that EverMark is installed to .
+                                                'root': os.path.abspath(os.path.dirname(__file__)),  # The directory that EverMark is installed to .
                                                 'auth_token': '',
                                                 'ignore_dirs': '',
                                                 'input_encoding': '',
@@ -65,6 +70,8 @@ class EverMark(object):
             opt = cf.get('main', 'log_level')
             if opt == 'debug':
                 log.setLevel(logging.DEBUG)
+
+            log.info('=' * 10 + 'EverMark Sync Start' + '='*10)
 
             opt = cf.get('main', 'test')
             self._test = True if (opt == 'yes') else False
@@ -98,9 +105,9 @@ class EverMark(object):
             self.css_str = f.read().decode('utf-8')
 
         # Create directory for html logs
-        if 'html' not in os.listdir('.'):
-            os.mkdir('./html')
-        self.html_log_path = './html'
+        self.html_log_path = os.path.join(self.root_path, 'logs/html')
+        if not os.path.exists(self.html_log_path):
+            os.mkdir(self.html_log_path)
 
         self.note_sync_status_file_path = os.path.join(self.root_path, 'status.json')
         self.note_sync_status = {}  # {note_guid: modify_time} modify time is of 'YYYY-MM-DD hh:mm:ss' format
@@ -234,7 +241,8 @@ class EverMark(object):
                 '200px;max-width: 980px;margin: 0 auto;padding: 45px;}'
         html += '</style>'
         html += '<article class="markdown-body">'
-        html += markdown2.markdown(markdown_str, extras=["tables", "fenced-code-blocks", "cuddled-lists"])
+        md_html = markdown2.markdown(markdown_str, extras=["tables", "fenced-code-blocks", "cuddled-lists"])
+        html += md_html
         html += '</article>'
 
         if log.isEnabledFor(logging.DEBUG):
@@ -316,7 +324,10 @@ class EverMark(object):
     def create_notebook(self, notebook_name):
         log.debug('Start to create notebook ' + notebook_name)
         notebook = Types.Notebook()
-        notebook.name = notebook_name
+        if isinstance(notebook_name, unicode):
+            notebook.name = notebook_name.encode('utf-8')
+        else:
+            notebook.name = notebook_name
         notebook.defaultNotebook = False
         created_notebook = self.note_store.createNotebook(notebook)
         log.debug('Create notebook succeed')
@@ -326,7 +337,12 @@ class EverMark(object):
 
     def inner_create_note(self, notebook_name, note_title, html, guid=None):
         note = Types.Note()
-        note.title = note_title
+
+        if isinstance(note_title, unicode):
+            note.title = note_title.encode('utf-8')
+        else:
+            note.title = note_title
+
         if guid:
             note.guid = guid
         note.content = '<?xml version="1.0" encoding="UTF-8"?>'
@@ -350,7 +366,9 @@ class EverMark(object):
         log.debug('Start to create note ' + notebook_name + '/' + note_title)
         note = self.inner_create_note(notebook_name, note_title, html)
         created_note = self.note_store.createNote(note)
-        self.notes[note.notebookGuid].append({'guid': created_note.guid, 'title': created_note.title})
+        if note.notebookGuid not in self.notes:
+            self.notes[note.notebookGuid] = []
+        self.notes[note.notebookGuid].append({'guid': created_note.guid, 'title': created_note.title.decode('utf-8')})
         log.debug("Successfully create a new note with GUID %s" % created_note.guid)
         return created_note
 
@@ -422,7 +440,7 @@ class EverMark(object):
         except:
             log.error(traceback.format_exc())
 
-    def sync(self, root_path):  # root_path should be absolute path
+    def sync(self, root_path):  # root_path should be absolute path and unicode string
         sub_dirs = os.listdir(root_path)
         for sub_dir in sub_dirs:
             if '.' in sub_dir or sub_dir in self.ignore_sub_dirs:
@@ -462,4 +480,8 @@ class EverMark(object):
 
 if __name__ == '__main__':
     em = EverMark()
-    em.run('./test')
+    default_workbench = os.path.expanduser(u'~/evermark')
+    if not os.path.exists(default_workbench):
+        os.mkdir(default_workbench)
+    em.run(default_workbench)
+

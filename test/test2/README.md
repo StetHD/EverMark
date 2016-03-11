@@ -12,7 +12,6 @@ Web微信协议参考资料：
 
 [qwx: WeChat Qt frontend 微信Qt前端](https://github.com/xiangzhai/qwx)
 
-
 ## 1 环境与依赖
 
 此版本只能运行于Python 2环境 。
