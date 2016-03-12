@@ -98,6 +98,8 @@ Copy the Developer Token after you have created it, and save it carefully(anyone
 
 3. Set `account_type` to `evernote`, or `yinxiang` if you are a **印象笔记** user.
 
+4. Rename `conf.example.ini` to `conf.ini`.
+
 ### Run
 You can directly execute `evermark.py` in the installed path.
 
