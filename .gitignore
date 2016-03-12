@@ -62,7 +62,7 @@ target/
 .ipynb_checkpoints
 
 .idea
-img/
 /conf.ini
 html/*
 /*.json
+logs/
