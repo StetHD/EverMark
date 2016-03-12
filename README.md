@@ -20,6 +20,28 @@ Only files that have `.txt` or `.md` suffix would be synced to **Evernote** .
 `md` represents  **MarkDown** files.
 
 
+## MarkDown Support
+
+### Now
+
+- [x] paragraph
+- [x] header
+- [x] block quote
+- [x] list
+- [x] link
+- [x] code
+- [ ] image
+
+### Next Version
+
+- [x] paragraph
+- [x] header
+- [x] block quote
+- [x] list
+- [x] link
+- [x] code
+- [x] image
+
 ## Workbench structure
 
 **EverMark** can sync a whole directory(root directory of your workbench) to your **Evernote** account.
