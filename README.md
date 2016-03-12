@@ -1,9 +1,9 @@
 # EverMark
 A tool that can sync local markdown/text notes to **Evernote** .
 
-## Ability
+## 1 Ability
 
-### Sync directories
+### 1.1 Sync directories
 
 Sub directories that in the root directory (can be set by user in `conf.ini`) would be synced automatically.
 
@@ -11,7 +11,7 @@ This means, if there is no notebook in **Evernote** has the same name as the sub
 
 Users can make **EverMark** not to sync specific sub directories by edit `ignore_dirs` (sub directory names are splitted by `,`) in `conf.ini`.
 
-### Sync notes
+### 1.2 Sync notes
 
 Only files that have `.txt` or `.md` suffix would be synced to **Evernote** .
 
@@ -20,9 +20,9 @@ Only files that have `.txt` or `.md` suffix would be synced to **Evernote** .
 `md` represents  **MarkDown** files.
 
 
-## MarkDown Support
+## 2 MarkDown Support
 
-### Now
+### 2.1 Now
 
 - [x] paragraph
 - [x] header
@@ -32,7 +32,7 @@ Only files that have `.txt` or `.md` suffix would be synced to **Evernote** .
 - [x] code
 - [ ] image
 
-### Next Version
+### 2.2 Next Version
 
 - [x] paragraph
 - [x] header
@@ -42,7 +42,7 @@ Only files that have `.txt` or `.md` suffix would be synced to **Evernote** .
 - [x] code
 - [x] image
 
-## Workbench structure
+## 3 Workbench structure
 
 **EverMark** can sync a whole directory(root directory of your workbench) to your **Evernote** account.
 
@@ -70,16 +70,23 @@ would be converted by **EverMark** to **Evernote** note structure:
     - note (named *f1*)
     - note (named *f3*)
 
-## Usage
+## 4 Usage
 
-### Install **EverMark**
+### 4.1 Dependencies
+**EverMark** depends on lxml, cssutils, cssselect, oauth2. You need to install them:
+
+```shell
+pip install lxml, cssutils, cssselect, oauth
+```
+
+### 4.2 Install **EverMark**
 **EverMark** is written by **Python**, so firstly make sure that your PC has **Python** installed.
 
 1. Download **EverMark** from ***github***.
 
 2. Unpack it, and move it to anywhere you like.
 
-### Get **Evernote** Developer Token
+### 4.3 Get **Evernote** Developer Token
 **EverMark** need a **Evernote** Developer Token to access your account.
 
 So you need to create a **Evernote** Developer Token.
@@ -90,7 +97,7 @@ Or you can just go to [Create **Evernote** Developer Token](https://www.evernote
 
 Copy the Developer Token after you have created it, and save it carefully(anyone have this token can access your notes in **Evernote** !) .
 
-### Configure **EverMark**
+### 4.4 Configure **EverMark**
 
 1. Open file `conf.example.ini` in the path that **EverMark** is installed to.
 
@@ -100,7 +107,7 @@ Copy the Developer Token after you have created it, and save it carefully(anyone
 
 4. Rename `conf.example.ini` to `conf.ini`.
 
-### Run
+### 4.5 Run
 You can directly execute `evermark.py` in the installed path.
 
 For example, if the path you install **EverMark** is *path_to_evermark*, then you can start **EverMark** by `python path_to_evermark/evermark.py`.
@@ -109,20 +116,20 @@ Or you can create a link to `path_to_evermark/evermark.py` and execute it anywhe
 
 The default workbench is `evermark` directory in you `HOME` path.
 
-## Example images
+## 5 Example images
 
-### Workbench
+### 5.1 Workbench
 
 ![workbench](img/workbench.jpg)
 
-### Start **EverMark**
+### 5.2 Start **EverMark**
 
 ![start](img/start.jpg)
 
-### Sync result: notebooks
+### 5.3 Sync result: notebooks
 
 ![notebooks](img/notebooks.jpg)
 
-### Sync result: note
+### 5.4 Sync result: note
 
 ![notebooks](img/note.jpg)
