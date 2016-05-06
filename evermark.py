@@ -144,6 +144,9 @@ class EverMark(object):
         self.note_sync_status[note_guid] = time_str
 
     def login(self):
+    """
+    login Evernote
+    """
         if self._test:
             return True
 
@@ -172,6 +175,9 @@ class EverMark(object):
             log.error('Login failed')
 
     def sync_status(self):
+    """
+    Sync Evernote status
+    """
         if self._test:
             return
 
